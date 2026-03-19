@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三眼怪打地鼠（投球版）</title>
+    <style>
+        :root {
+            --alien-green: #a2d149;
+            --alien-toxic: #9b59b6;
+            --hole-color: #3e2723;
+            --grass-color: #4caf50;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: radial-gradient(circle, #81c784, #388e3c);
+            font-family: 'Arial', sans-serif;
+            overflow: hidden;
+            cursor: crosshair; /* Fallback */
+        }
+
+        /* 投球游標 */
+        body {
+            cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32"><circle cx="16" font-size="20" cy="16" r="14" fill="white" stroke="black" stroke-width="2"/><circle cx="16" cy="16" r="10" fill="none" stroke="red" stroke-width="1" stroke-dasharray="2,2"/></svg>') 16 16, auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+        }
+
+        .stats {
+            display: flex;
+            gap: 20px;
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+
+        .toxic-indicator {
+            color: #ffeb3b;
+        }
+
+        /* 遊戲區域 */
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(3, 160px);
+            grid-template-rows: repeat(3, 160px);
+            gap: 20px;
+            padding: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .hole {
+            width: 160px;
+            height: 160px;
+            position: relative;
+            overflow: hidden;
+            background: var(--hole-color);
+            border-radius: 50% 50% 20% 20%;
+            border-bottom: 10px solid #2e1a16;
+            box-shadow: inset 0 10px 10px rgba(0,0,0,0.5);
+        }
+
+        /* 三眼怪 CSS 繪製 */
+        .alien {
+            width: 100px;
+            height: 120px;
+            position: absolute;
+            bottom: -120px;
+            left: 50%;
+            transform: translateX(-50%);
+            transition: bottom 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: auto;
+        }
+
+        .alien.up {
+            bottom: 10px;
+        }
+
+        .alien-body {
+            width: 100px;
+            height: 110px;
+            background: var(--alien-green);
+            border-radius: 50% 50% 20% 20%;
+            position: relative;
+            border: 3px solid #000;
+        }
+
+        .toxic .alien-body {
+            background: var(--alien-toxic);
+            box-shadow: 0 0 20px #6a1b9a;
+            transform: skewX(-5deg) rotate(3deg); /* 身體歪斜 */
+            border-color: #2e1a16;
+        }
+
+        /* 三顆眼睛基礎樣式 */
+        .eyes {
+            display: flex;
+            justify-content: space-around;
+            width: 80%;
+            margin: 20px auto 0;
+            position: relative;
+            z-index: 2;
+        }
+
+        .eye {
+            width: 22px;
+            height: 22px;
+            background: white;
+            border-radius: 50%;
+            border: 2px solid #000;
+            position: relative;
+        }
+
+        .pupil {
+            width: 8px;
+            height: 8px;
+            background: black;
+            border-radius: 50%;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* 邪惡眉毛與歪斜眼睛（覆蓋樣式） */
+        .toxic .eye {
+            background: #ffcdd2; /* 微微發紅的眼白 */
+            border-width: 3px;
+        }
+        .toxic .eye:nth-child(1) { transform: scale(0.8) translate(-5px, 5px); }
+        .toxic .eye:nth-child(2) { transform: scale(1.2) translate(0, -5px); }
+        .toxic .eye:nth-child(3) { transform: scale(0.9) translate(5px, 10px); }
+
+        .toxic .eye::before {
+            content: '';
+            position: absolute;
+            top: -10px;
+            left: -5px;
+            width: 30px;
+            height: 10px;
+            background: #4a148c;
+            transform: rotate(20deg); /* 憤怒眉毛 */
+            border-radius: 5px;
+        }
+        .toxic .eye:nth-child(3)::before {
+            transform: rotate(-20deg);
+        }
+
+        /* 邪惡歪嘴 */
+        .toxic .mouth {
+            width: 40px;
+            height: 15px;
+            background: #311b92;
+            border-radius: 50% 10% 50% 10%; /* 扭曲的形狀 */
+            border: 2px solid #000;
+            transform: rotate(-15deg) translate(5px, -5px);
+            overflow: hidden;
+        }
+        .toxic .mouth::after {
+            content: 'vvv'; /* 牙齒感 */
+            color: #fff;
+            font-size: 10px;
+            display: block;
+            margin-top: -2px;
+            letter-spacing: 2px;
+        }
+
+        /* 擊中動畫 */
+        .hit-effect {
+            animation: hit-shake 0.2s;
+        }
+        @keyframes hit-shake {
+            0% { transform: translateX(-50%) rotate(0); }
+            25% { transform: translateX(-55%) rotate(-5deg); }
+            75% { transform: translateX(-45%) rotate(5deg); }
+            100% { transform: translateX(-50%) rotate(0); }
+        }
+
+        /* 選單與按鈕 */
+        .controls {
+            margin-top: 30px;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            background: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 30px;
+            cursor: pointer;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            transition: transform 0.1s, background 0.3s;
+        }
+
+        button:hover {
+            background: #f57c00;
+            transform: scale(1.05);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>🛸 三眼怪投球挑戰 🛸</h1>
+        <p>擊中一般怪得分，擊中有毒怪分數歸零！<br>連續擊中 3 次有毒怪遊戲結束！</p>
+    </div>
+
+    <div class="stats">
+        <div>分數: <span id="score">0</span></div>
+        <div class="toxic-indicator">危險警告: <span id="toxic-strikes">0</span>/3</div>
+    </div>
+
+    <div class="game-board" id="board">
+        <!-- 9個洞 -->
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+        <div class="hole"><div class="alien"></div></div>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn">開始遊戲</button>
+    </div>
+
+    <div id="overlay" class="overlay">
+        <h1 id="overlay-title">遊戲結束!</h1>
+        <p id="overlay-score">得分: 0</p>
+        <button onclick="resetGame()">再試一次</button>
+    </div>
+
+    <script>
+        const holes = document.querySelectorAll('.hole');
+        const scoreBoard = document.querySelector('#score');
+        const toxicStrikesBoard = document.querySelector('#toxic-strikes');
+        const startBtn = document.querySelector('#startBtn');
+        const overlay = document.querySelector('#overlay');
+        const overlayScore = document.querySelector('#overlay-score');
+        const overlayTitle = document.querySelector('#overlay-title');
+
+        let lastHole;
+        let timeUp = false;
+        let score = 0;
+        let toxicStrikes = 0;
+        let currentPeepTimeout;
+        let baseSpeed = 1000; // 基礎速度（毫秒）
+
+        // 初始化三眼怪內容
+        function createAlienContent(isToxic) {
+            return `
+                <div class="alien-body">
+                    <div class="antenna"></div>
+                    <div class="eyes">
+                        <div class="eye"><div class="pupil"></div></div>
+                        <div class="eye"><div class="pupil"></div></div>
+                        <div class="eye"><div class="pupil"></div></div>
+                    </div>
+                    <div class="mouth"></div>
+                </div>
+            `;
+        }
+
+        // 隨機洞
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) return randomHole(holes);
+            lastHole = hole;
+            return hole;
+        }
+
+        // 變速邏輯：忽快忽慢
+        function randomTime(min, max) {
+            // 隨機調整變速權重
+            const modifier = Math.random() > 0.7 ? 0.5 : (Math.random() < 0.2 ? 1.8 : 1.0);
+            return Math.round(Math.random() * (max - min) + min) * modifier;
+        }
+
+        function peep() {
+            if (timeUp) return;
+
+            // 隨機時間：依據目前基礎速度波動
+            const time = randomTime(baseSpeed * 0.5, baseSpeed * 1.5);
+            const hole = randomHole(holes);
+            const alien = hole.querySelector('.alien');
+            
+            // 決定怪獸類型（20% 機率為有毒怪）
+            const isToxic = Math.random() < 0.2;
+            alien.className = 'alien' + (isToxic ? ' toxic' : '');
+            alien.innerHTML = createAlienContent(isToxic);
+            alien.dataset.type = isToxic ? 'toxic' : 'normal';
+
+            alien.classList.add('up');
+
+            currentPeepTimeout = setTimeout(() => {
+                alien.classList.remove('up');
+                if (!timeUp) peep();
+            }, time);
+        }
+
+        function startGame() {
+            score = 0;
+            toxicStrikes = 0;
+            scoreBoard.textContent = 0;
+            toxicStrikesBoard.textContent = 0;
+            timeUp = false;
+            startBtn.style.display = 'none';
+            peep();
+            
+            // 遊戲中緩慢提升基礎難度，但保持變速
+            const difficultyInterval = setInterval(() => {
+                if (timeUp) clearInterval(difficultyInterval);
+                baseSpeed = Math.max(400, baseSpeed - 20);
+            }, 3000);
+        }
+
+        function bonk(e) {
+            if(!e.isTrusted) return; // 沒點到不算
+            const alien = e.currentTarget;
+            if(!alien.classList.contains('up')) return;
+
+            const type = alien.dataset.type;
+            
+            // 視覺反饋
+            alien.classList.add('hit-effect');
+            setTimeout(() => alien.classList.remove('hit-effect'), 200);
+
+            if (type === 'normal') {
+                score++;
+                toxicStrikes = 0; // 擊中普通怪，連續次數重置
+                scoreBoard.textContent = score;
+                toxicStrikesBoard.textContent = toxicStrikes;
+            } else {
+                score = 0;
+                toxicStrikes++;
+                scoreBoard.textContent = score;
+                toxicStrikesBoard.textContent = toxicStrikes;
+                
+                if (toxicStrikes >= 3) {
+                    gameOver("有毒三眼怪三連發！");
+                }
+            }
+
+            alien.classList.remove('up');
+        }
+
+        function gameOver(title = "遊戲結束!") {
+            timeUp = true;
+            clearTimeout(currentPeepTimeout);
+            overlayTitle.textContent = title;
+            overlayScore.textContent = `最終得分: ${score}`;
+            overlay.style.display = 'flex';
+        }
+
+        function resetGame() {
+            overlay.style.display = 'none';
+            baseSpeed = 1000;
+            startGame();
+        }
+
+        // 綁定點擊事件
+        document.querySelectorAll('.alien').forEach(alien => {
+            alien.addEventListener('click', bonk);
+        });
+
+        startBtn.addEventListener('click', startGame);
+
+    </script>
+</body>
+</html>
